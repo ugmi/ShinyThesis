@@ -32,7 +32,7 @@ rc_tabs <- tabsetPanel(
 
 
 ui <- fluidPage(
-  theme = bslib::bs_theme(bootswatch = "sandstone"),
+  tags$style("h2 {text-align: center; font-family: Helvetica; padding: 10px 5px 15px; background-color: hsl(0, 0%, 94%);}"),
   titlePanel("Coarsening and interval-censoring in time-to-event data"),
   sidebarLayout(
     # Sidebar for choosing the parameters
@@ -41,7 +41,8 @@ ui <- fluidPage(
       numericInput("N", "Observations", 2000, min = 1, max = 5000),
       selectInput("dist", "Distribution", list("weibull")),
       parameter_tabs,
-      actionButton("viz", "Visualize"),
+      actionButton("viz", "Set parameters"),
+      p(br()),
       
       # For bias evaluation
       numericInput("coar", "Coarsening interval width", 1, min = 1, max = 1),
@@ -61,7 +62,8 @@ ui <- fluidPage(
         choices = list("30, 60, ..., 360 days" = 1, 
                        "1 year, 2 years, ..., 5 years" = 2)
       ),
-      actionButton("click", "Evaluate Bias"),
+      actionButton("click", "Evaluate bias"),
+      style = "background-color: white; border: solid; border-radius: 0px; font-family: Monospace;"
     ),
     # Main panel with plots
     mainPanel(
