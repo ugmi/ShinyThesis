@@ -60,14 +60,12 @@ generate_right_censoring <- function(days, duration, followup) {
 generate_intervals <- function(exit, infinite, width, rounding) {
   # Create interval limits
   if(rounding == "Rounded up") {
-    offset <- floor(runif(length(infinite), 1, width))
+    G <- sample(1:width, length(exit), replace = TRUE)
   } else {
-    offset <- floor(runif(length(infinite), 0, width-1))
+    G <- sample(0:(width-1), length(exit), replace = TRUE)
   }
-  L <- ifelse(width == 0 | infinite, exit, pmax(0, exit - offset))
-  U <- ifelse(infinite,
-              Inf,
-              ifelse(L == 0 & width != 1, exit + width - offset, L + width))
+  L <- ifelse(infinite, exit, pmax(0, exit - G))
+  U <- ifelse(infinite, Inf, exit + width - G)
   
   # Derive additional times
   obs <- ifelse(!infinite, U, exit)  # "observed" value
@@ -221,6 +219,7 @@ plot_bias <- function(bias, cols, title) {
   pchs <- c(20, 8, 21, 22, 24, 25)
   
   # Make the plot
+  par(family = "Helvetica")
   plot(
     days,
     bias[, 1],
