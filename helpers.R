@@ -1,5 +1,4 @@
 library(survival)
-library(flexsurv)
 library(icenReg)
 
 # Generating survival times ----------------------------------------------------
@@ -13,16 +12,12 @@ library(icenReg)
 generate_times <- function(n, dist, pars) {
   if(dist == "weibull") {
     t <- rweibull(n, pars[["shape"]], pars[["scale"]])
-  } else if(dist == "gamma") {
-    t <- rgamma(n, pars[["shape"]], pars[["rate"]])
   } else if(dist == "exponential") {
     t <- rexp(n, pars[["rate"]])
   } else if(dist == "lognormal") {
     t <- rlnorm(n, pars[["meanlog"]], pars[["sdlog"]])
   } else if(dist == "loglogistic") {
     t <- rllogis(n, pars[["shape"]], pars[["scale"]])
-  } else if(dist == "gompertz") {
-    t <- rgompertz(n, pars[["shape"]], pars[["rate"]])
   } else {
     stop("distribution not available")
   }
@@ -101,6 +96,12 @@ generate_df <- function(n, dist, pars, duration, followup, width, rounding) {
 
 # Estimation -------------------------------------------------------------------
 
+# Transform parameters from survreg to pweibull parametrisation
+transform_pars <- function(icoefs) {
+  return(c(1/exp(icoefs[[2]]), exp(icoefs[[1]])))
+}
+
+
 #' Estimate survival for different time points and distribution parameters
 #' 
 #' @param D Time points for which to estimate survival
@@ -115,34 +116,36 @@ get_estimates <- function(D, df, dist) {
   scurv <- getSCurves(NPMLE)
   
   # Fit parametric models
-  mid <- flexsurvreg(Surv(mid, status == "Dead") ~ 1, data = df, dist = dist)
-  ign <- flexsurvreg(Surv(obs, status == "Dead") ~ 1, data = df, dist = dist)
-  ic <- flexsurvreg(Surv(lower, upper, type = "interval2") ~ 1, 
-                    data = df, dist = dist)
+  mid <- survreg(Surv(mid, status == "Dead") ~ 1, data = df, dist = dist)
+  ign <- survreg(Surv(obs, status == "Dead") ~ 1, data = df, dist = dist)
+  ic <- survreg(Surv(lower, upper, type = "interval2") ~ 1, data = df, dist = dist)
   
-  # Estimate and save probabilities into an array
-  pD <- array(c(
-    summary(KM.mid, times = D)[[6]],
-    summary(KM.obs, times = D)[[6]],
-    sapply(D, function(d) 
-      scurv$S_curves$baseline[scurv$Tbull_ints[, 2] >= d][1]),
-    summary(mid, type = "survival", t = D, ci = FALSE, se = FALSE)[[1]][[2]],
-    summary(ign, type = "survival", t = D, ci = FALSE, se = FALSE)[[1]][[2]],
-    summary(ic, type = "survival", t = D, ci = FALSE, se = FALSE)[[1]][[2]]
-  ),
-  dim = c(length(D), 6), 
-  dimnames = list(D, c("KM.MID", "KM.IGN", "NPMLE", "MID", "IGN", "IC"))
-  )
-  
-  # Estimates from model fit differ from base R parametrisation, 
-  # thus we need to transform them before saving into an array.
-  f1 <- mid$dlist$inv.transforms[[1]]
-  f2 <- mid$dlist$inv.transforms[[2]]
-  pars <- array(c(f1(coef(mid)[[1]]), f2(coef(mid)[[2]]),
-                  f1(coef(ign)[[1]]), f2(coef(ign)[[2]]),
-                  f1(coef(ic)[[1]]), f2(coef(ic)[[2]])), 
-                dim = c(2, 3),
-                dimnames = list(mid$dlist$pars, c("MID", "IGN", "IC")))
+  if(dist == "weibull") {
+    # Estimates from model fit differ from base R parametrisation, 
+    # thus we need to transform them.
+    mid.pars <- transform_pars(mid$icoef)
+    ign.pars <- transform_pars(ign$icoef)
+    ic.pars <- transform_pars(ic$icoef)
+    
+    # Estimate and save probabilities into an array
+    pD <- array(c(
+      summary(KM.mid, times = D)[[6]],
+      summary(KM.obs, times = D)[[6]],
+      sapply(D, function(d) 
+        scurv$S_curves$baseline[scurv$Tbull_ints[, 2] >= d][1]),
+      1 - pweibull(D, mid.pars[[1]], mid.pars[[2]]),
+      1 - pweibull(D, ign.pars[[1]], ign.pars[[2]]),
+      1 - pweibull(D, ic.pars[[1]], ic.pars[[2]])
+    ),
+    dim = c(length(D), 6), 
+    dimnames = list(D, c("KM.MID", "KM.IGN", "NPMLE", "MID", "IGN", "IC"))
+    )
+    
+    # Save parameters into an array.
+    pars <- array(c(mid.pars, ign.pars, ic.pars), 
+                  dim = c(2, 3),
+                  dimnames = list(c("shape", "scale"), c("MID", "IGN", "IC")))
+  }
   
   return(list(pD, pars))
 }
